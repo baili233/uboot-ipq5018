@@ -1,6 +1,6 @@
 #include <common.h>
 #include <gl_api.h>
-#include <asm/gpio.h>
+#include <asm/arch-qca-common/gpio.h>
 #include <fdtdec.h>
 
 DECLARE_GLOBAL_DATA_PTR;

@@ -2,8 +2,7 @@
 #include "httpd.h"
 #include "fs.h"
 #include "fsdata.h"
-// #include <asm/gpio.h>
-#include <asm/gpio.h>
+#include <asm/arch-qca-common/gpio.h>
 #include <gl_api.h>
 
 #define STATE_NONE				0		// empty state (waiting for request...)

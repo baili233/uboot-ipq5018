@@ -12,7 +12,7 @@
 #include <cli.h>
 #include <console.h>
 #include <version.h>
-#include <asm/gpio.h>
+#include <asm/arch-qca-common/gpio.h>
 #include <gl_api.h>
 DECLARE_GLOBAL_DATA_PTR;
 

@@ -14,7 +14,7 @@
 #include "../httpd/uip.h"
 #include "../httpd/uip_arp.h"
 #include <gl_api.h>
-#include <asm/gpio.h>
+#include <asm/arch-qca-common/gpio.h>
 
 // extern flash_info_t flash_info[];
 

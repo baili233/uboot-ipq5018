@@ -16,7 +16,7 @@
 #include <flash.h>
 #endif
 
-#include <asm/gpio.h>
+#include <asm/arch-qca-common/gpio.h>
 #include <gl_api.h>
 
 /* Well known TFTP port # */
