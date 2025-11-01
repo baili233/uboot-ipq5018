@@ -12,7 +12,8 @@
 #include <cli.h>
 #include <console.h>
 #include <version.h>
-
+#include <asm/gpio.h>
+#include <gl_api.h>
 DECLARE_GLOBAL_DATA_PTR;
 
 /*
@@ -81,10 +82,20 @@ void main_loop(void)
 	run_preboot_environment_command();
 #endif
 
+#ifdef CONFIG_IPQ_ETH_INIT_DEFER
+	puts("\nNet:   ");
+	eth_initialize();
+#endif
+
 #if defined(CONFIG_UPDATE_TFTP)
 	update_tftp(0UL, NULL, NULL);
 #endif /* CONFIG_UPDATE_TFTP */
 
+#ifdef CONFIG_HTTPD
+	check_button_is_press();
+#endif
+
+	gl_led_booting();
 	s = bootdelay_process();
 #ifndef CONFIG_REDUCE_FOOTPRINT
 	if (cli_process_fdt(&s))

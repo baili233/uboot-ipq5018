@@ -55,6 +55,10 @@ int gpio_get_value(unsigned int gpio);
 int qca_gpio_init(int offset);
 int qca_gpio_deinit(int offset);
 void gpio_direction_output(unsigned int gpio, unsigned int out);
+void gl_led_booting(void);
+void gl_led_init(void);
+void gl_btn_init(void);
+void led_toggle(const char *gpio_name);
 
 /* GPIO TLMM: Output value */
 #define GPIO_OUT_LOW	0

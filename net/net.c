@@ -108,6 +108,11 @@
 #include "sntp.h"
 #endif
 
+#include "../httpd/uipopt.h"
+#include "../httpd/uip.h"
+#include "../httpd/uip_arp.h"
+#include "httpd.h"
+#include <gl_api.h>
 DECLARE_GLOBAL_DATA_PTR;
 
 /** BOOTP EXTENTIONS **/
@@ -203,6 +208,13 @@ static int net_check_prereq(enum proto_t protocol);
 static int net_try_count;
 
 int __maybe_unused net_busy_flag;
+unsigned char *webfailsafe_data_pointer = NULL;
+int webfailsafe_is_running = 0;
+int webfailsafe_ready_for_upgrade = 0;
+int webfailsafe_upgrade_type = WEBFAILSAFE_UPGRADE_TYPE_FIRMWARE;
+extern int webfailsafe_post_done;
+extern int file_too_big;
+void NetReceiveHttpd(volatile uchar * inpkt, int len);
 
 /**********************************************************************/
 
@@ -386,6 +398,12 @@ void net_init(void)
 	net_init_loop();
 }
 
+
+#ifdef CONFIG_WINDOWS_UPGRADE_SUPPORT
+extern char NetUipLoop;
+extern char dhcpd_end;
+#endif
+
 /**********************************************************************/
 /*
  *	Main network processing loop.
@@ -406,6 +424,12 @@ int net_loop(enum proto_t protocol)
 		eth_halt();
 		eth_set_current();
 		ret = eth_init();
+#if defined(CONFIG_HTTPD)
+		while(protocol==HTTPD && ret < 0){
+			ret = eth_init();
+			mdelay(1000);
+		}
+#endif
 		if (ret < 0) {
 			eth_halt();
 			return ret;
@@ -477,6 +501,16 @@ restart:
 #if defined(CONFIG_CMD_PING)
 		case PING:
 			ping_start();
+			break;
+#endif
+#if defined(CONFIG_HTTPD)
+		case HTTPD:
+#ifdef CONFIG_WINDOWS_UPGRADE_SUPPORT
+			dhcpd_end = 0;
+			NetUipLoop = 0;
+#endif
+			// switch_to_bridge();
+			HttpdStart();
 			break;
 #endif
 #if defined(CONFIG_CMD_NFS)
@@ -551,7 +585,10 @@ restart:
 		 *	Most drivers return the most recent packet size, but not
 		 *	errors that may have happened.
 		 */
-		eth_rx();
+		if(eth_rx() > 0){
+			if(protocol == HTTPD)
+			  HttpdHandler();
+		}
 
 		/*
 		 *	Abort if ctrl-c was pressed.
@@ -559,6 +596,8 @@ restart:
 		if (ctrlc()) {
 			/* cancel any ARP that may not have completed */
 			net_arp_wait_packet_ip.s_addr = 0;
+			if(protocol == HTTPD)
+			  HttpdStop();
 
 			net_cleanup_loop();
 			eth_halt();
@@ -571,6 +610,26 @@ restart:
 			debug_cond(DEBUG_INT_STATE, "--- net_loop Abort!\n");
 			ret = -EINTR;
 			goto done;
+		}
+
+		if (protocol == HTTPD) {
+			if(!webfailsafe_ready_for_upgrade)
+				net_state = NETLOOP_CONTINUE;
+		else
+			net_state = NETLOOP_SUCCESS;
+#if 0
+			//workaround for some case we can't receive uip_acked
+			//just force upgrade
+			if(webfailsafe_post_done && !file_too_big && !webfailsafe_ready_for_upgrade){
+				if(wait_time == 0)
+					wait_time = get_timer(0);
+				if((get_timer(0) - wait_time) > 1000){
+					//force update
+					printf("ack timeout force upgrade cost time= %ld\n",(get_timer(0) - wait_time));
+					webfailsafe_ready_for_upgrade = 1;
+				}
+			}
+#endif
 		}
 
 		/*
@@ -615,7 +674,19 @@ restart:
 				printf("Bytes transferred = %d (%x hex)\n",
 				       net_boot_file_size, net_boot_file_size);
 				setenv_hex("filesize", net_boot_file_size);
+				setenv_hex("filesize_128k", (net_boot_file_size/131072+(net_boot_file_size%131072!=0))*131072);
 				setenv_hex("fileaddr", load_addr);
+				if(protocol == HTTPD){
+					if(do_http_upgrade(net_boot_file_size,webfailsafe_upgrade_type) < 0){
+						HttpdStop();
+						goto restart;
+					}
+					else{
+						HttpdDone();
+						do_reset( NULL,0,0,NULL );
+						printf("reboot fail\n");
+					}
+				}
 			}
 			if (protocol != NETCONS)
 				eth_halt();
@@ -1032,6 +1103,180 @@ static void receive_icmp(struct ip_udp_hdr *ip, int len,
 	}
 }
 
+#ifdef CONFIG_WINDOWS_UPGRADE_SUPPORT
+char gl_probe_upgrade=0;
+char upgrade_listen=0;
+
+static char gl_cmd_msg[5][256]={0}; 
+
+void gl_upgrade_send_msg(char *msg)
+{
+    char i = 0;
+    char msg_len=strlen(msg);
+    msg_len+=1;
+    unsigned char rep[2][42]={{ 0xff,0xff,0xff,0xff,0xff,0xff,0x14,0x6b,0x9c,0xb7,0x12,0x30,0x08,0x00,0x45,0x00,0x00,0x4d,0x00,0x01,0x00,0x00,0x40,0x01,0xb9,0x06,0xc0,0xa8,0x01,0x01,0xff,0xff,0xff,0xff,0x08,0x00,0xfa,0xb1,0x00,0x01,0x00,0x01 },{0x00 }};
+    struct eth_device *eth = eth_get_dev();
+    if(eth->state == ETH_STATE_PASSIVE){
+        //bd_t *bd = gd->bd;
+        eth_init();
+                
+    }
+    memcpy(rep[1],msg,msg_len);
+
+    for(i=0;i<5;i++){
+        memcpy((void*)net_tx_packet, rep, 42 + msg_len);
+        eth_send(net_tx_packet, 42 + msg_len);
+        udelay (10000);
+            
+    }
+
+
+}
+
+
+char get_crc_param(char *buf,char *result,char num)
+{
+    int i=0;
+    int cunt=-1;
+    char *start=buf;
+    int len=0;
+    while((buf[i] != '\0') && (buf[i] != '\r') && (buf[i] != '\n') ){
+        if(buf[i] == ','){
+            if(++cunt == num){
+                len = buf+i-start;
+                memcpy(result,start,len);
+                result[len]='\0';
+                return 0;
+                            
+            }
+            start=buf+i+1;
+                    
+        }
+        i++;
+            
+    }
+    if((buf[i] == '\0') && (++cunt == num)){
+        len = buf+i-start;
+        memcpy(result,start,len);
+        result[len]='\0';
+        return 0;
+            
+    }
+    return -1;
+
+}
+char gl_cmd_ret = 1;
+int gl_upgrade_cmd_handle(char *cmd)
+{
+    if(strncmp(cmd,"scan",4)==0){
+        if(upgrade_listen == 0){
+            gl_upgrade_send_msg("glroute:hello");
+            upgrade_listen = 1;
+            printf("glinet scan\n");
+        }       
+    }
+    else if(strncmp(cmd,"cmd-",4)==0){
+        int i=0;
+        for(i=0;i<5;i++){
+            if(strlen(gl_cmd_msg[i])==0){
+                strcpy(gl_cmd_msg[i],cmd+4);
+                gl_upgrade_send_msg("glroute:ok");
+                printf("\nCMD:%s\n",gl_cmd_msg[i]);
+                break;
+                            
+            }
+                    
+        }
+        if( i >= 5  )
+            gl_upgrade_send_msg("glroute:err-no_space");
+            
+    }
+    else if (strncmp(cmd,"do-",3)==0){
+            int i=0;
+            for(i=0;i<5;i++){
+                if(strlen(gl_cmd_msg[i])){
+                    printf("\nDo cmd\n");
+                    setenv("gl_do_cmd",gl_cmd_msg[i]);
+                    gl_cmd_ret=run_command("run gl_do_cmd", 0);
+                                
+                }
+                else{
+                    break;
+                                
+                }
+                    
+            }
+            memset(gl_cmd_msg,0,sizeof(gl_cmd_msg));
+            gl_upgrade_send_msg("glroute:ok");
+            
+    }
+    else if (strncmp(cmd,"dhcp",4)==0){
+            run_command("dhcpd start", 0);
+            gl_upgrade_send_msg("glroute:ok");
+            
+    }
+    else if (strncmp(cmd,"crc-",4)==0){
+            char str_value[16]={0};
+            ulong addr, length,raw,crc;
+            get_crc_param(cmd+4,str_value,0);
+            addr  = simple_strtoul(str_value,NULL,16);
+            get_crc_param(cmd+4,str_value,1);
+            length = simple_strtoul(str_value,NULL,16);
+            get_crc_param(cmd+4,str_value,2);
+            raw = simple_strtoul(str_value,NULL,16);
+            crc = crc32 (0, (const uchar *) addr, length);
+            printf("crc:%lx,%lx,%lx,%lx\n",addr,length,raw,crc);
+            if((crc == raw)||(gl_cmd_ret == 0)){
+                gl_cmd_ret = 1;
+                gl_upgrade_send_msg("glroute:ok");
+                gl_probe_upgrade = 0;
+                upgrade_listen = 0;
+                        
+            }
+            else{
+                char err_msg[32]={0};
+                sprintf(err_msg,"glroute:err-crc_%lx",crc);
+                gl_upgrade_send_msg(err_msg);
+                    
+            }
+                    
+    }
+
+    return 0;
+
+}
+
+void gl_upgrade_hook(volatile uchar * inpkt, int len)
+{
+    char pk_buf[2048]={0};
+    //int i=0;
+    memcpy(pk_buf, (const char *)inpkt, len);
+    //    for(i=0;i<len;i++){
+    //         printf("%d:%02X,",i,pk_buf[i]);
+    //    }
+    if(strstr(pk_buf+42,"glinet:")){
+
+        gl_upgrade_cmd_handle(pk_buf+42+7);
+            
+    }
+}
+
+void gl_upgrade_probe(void)
+{
+    eth_rx();
+
+}
+
+void gl_upgrade_listen(void)
+{
+    while(upgrade_listen && gl_probe_upgrade)
+    eth_rx();
+
+}
+
+#endif //CONFIG_WINDOWS_UPGRADE_SUPPORT
+
+extern void dev_received(uchar *inpkt, int len);
 void net_process_received_packet(uchar *in_packet, int len)
 {
 	struct ethernet_hdr *et;
@@ -1046,6 +1291,22 @@ void net_process_received_packet(uchar *in_packet, int len)
 
 	debug_cond(DEBUG_NET_PKT, "packet received\n");
 
+#ifdef CONFIG_WINDOWS_UPGRADE_SUPPORT
+    if(gl_probe_upgrade){
+        gl_probe_upgrade = 0;
+        gl_upgrade_hook(in_packet, len);
+        gl_probe_upgrade = 1;
+        return;
+            
+    }
+
+    if(NetUipLoop) {
+        dev_received(in_packet, len);
+        return;
+            
+    }
+#endif
+
 	net_rx_packet = in_packet;
 	net_rx_packet_len = len;
 	et = (struct ethernet_hdr *)in_packet;
@@ -1053,6 +1314,11 @@ void net_process_received_packet(uchar *in_packet, int len)
 	/* too small packet? */
 	if (len < ETHER_HDR_SIZE)
 		return;
+
+	if(webfailsafe_is_running){
+		NetReceiveHttpd(in_packet,len);
+		return;
+	}
 
 #ifdef CONFIG_API
 	if (push_packet) {
@@ -1297,6 +1563,14 @@ static int net_check_prereq(enum proto_t protocol)
 		}
 		goto common;
 #endif
+#if defined(CONFIG_HTTPD)
+	case HTTPD:
+		if (net_httpd_ip.s_addr == 0) {
+			puts("*** ERROR: httpd address not given\n");
+			return 1;
+		}
+		goto common;
+#endif
 #if defined(CONFIG_CMD_SNTP)
 	case SNTP:
 		if (net_ntp_server.s_addr == 0) {
@@ -1324,7 +1598,7 @@ static int net_check_prereq(enum proto_t protocol)
 			return 1;
 		}
 #if	defined(CONFIG_CMD_PING) || defined(CONFIG_CMD_SNTP) || \
-	defined(CONFIG_CMD_DNS)
+	defined(CONFIG_CMD_DNS) || defined(CONFIG_CMD_NET)
 common:
 #endif
 		/* Fall through */

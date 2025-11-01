@@ -239,9 +239,9 @@ extern loff_t board_env_size;
 #define CONFIG_CMD_PING
 #define CONFIG_CMD_DHCP
 #define CONFIG_MII
-#define CONFIG_IPADDR				192.168.10.10
+#define CONFIG_IPADDR				192.168.1.1
 #define CONFIG_NETMASK				255.255.255.0
-#define CONFIG_SERVERIP				192.168.10.19
+#define CONFIG_SERVERIP				192.168.1.2
 #define CONFIG_CMD_TFTPPUT
 #define CONFIG_IPQ_MDIO				1
 #define CONFIG_IPQ_ETH_INIT_DEFER
@@ -318,7 +318,7 @@ extern loff_t board_env_size;
 #define CONFIG_SYS_MEMTEST_END			CONFIG_SYS_MEMTEST_START + 0x100
 
 /* NSS firmware loaded using bootm */
-#define CONFIG_BOOTCOMMAND			"bootipq"
+#define CONFIG_BOOTCOMMAND			"bootipq; httpd 192.168.1.1; reset"
 #define CONFIG_BOOTARGS				"console=ttyMSM0,115200n8"
 #define QCA_ROOT_FS_PART_NAME			"rootfs"
 
@@ -440,4 +440,5 @@ extern loff_t board_env_size;
 #define CONFIG_NAME_MAX_LEN	32
 #endif
 
+#define CONFIG_HTTPD
 #endif /* _IPQ5018_H */
