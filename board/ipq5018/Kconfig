@@ -143,4 +143,10 @@ config IPQ5018_CTCC_AP301_L
 	default n
 	help
 		Enable support for ipq5018 ctcc ap301-l support
+
+config IPQ5018_CR8818
+	bool "For ipq5018 xiaomi cr8818 support"
+	default n
+	help
+		Enable support for ipq5018 xiaomi cr8818 support
 endif
