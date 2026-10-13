@@ -1237,6 +1237,27 @@ int board_eth_init(bd_t *bis)
 					(char)tmp_phy_array[inner_loop];
 				}
 			}
+
+			gmac_cfg[loop].yt9215_switch_enable =
+				fdtdec_get_uint(gd->fdt_blob, offset,
+					"yt9215_switch_enable", 0);
+			if (gmac_cfg[loop].yt9215_switch_enable) {
+				gmac_cfg[loop].yt9215_mdio_addr =
+					fdtdec_get_uint(gd->fdt_blob, offset,
+						"yt9215_mdio_addr", 0x1d);
+				gmac_cfg[loop].yt9215_rst_gpio =
+					fdtdec_get_uint(gd->fdt_blob, offset,
+						"yt9215_rst_gpio", 0);
+				gmac_cfg[loop].yt9215_cpu_port =
+					fdtdec_get_uint(gd->fdt_blob, offset,
+						"yt9215_cpu_port", 4);
+				gmac_cfg[loop].yt9215_serdes_port =
+					fdtdec_get_uint(gd->fdt_blob, offset,
+						"yt9215_serdes_port", 8);
+				gmac_cfg[loop].yt9215_serdes_speed =
+					fdtdec_get_uint(gd->fdt_blob, offset,
+						"yt9215_serdes_speed", 2500);
+			}
 		}
 	}
 

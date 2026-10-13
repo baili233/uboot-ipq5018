@@ -50,6 +50,12 @@ extern void uniphy_channel0_input_output_6_get(int mode, u32 gpio, u8 *status,
 					       fal_port_speed_t *speed,
 					       fal_port_duplex_t *duplex);
 extern int ipq_athrs17_init(ipq_gmac_board_cfg_t *gmac_cfg);
+#ifdef CONFIG_YT9215_SWITCH
+#include "ipq_yt9215.h"
+extern void ppe_uniphy_refclk_set(void);
+extern void ppe_uniphy_set_forceMode(void);
+ipq_yt9215_swt_cfg_t yt9215_swt_cfg[IPQ5018_GMAC_PORT];
+#endif
 
 static int ipq_eth_wr_macaddr(struct eth_device *dev)
 {
@@ -366,6 +372,30 @@ static int ipq5018_phy_link_update(struct eth_device *dev)
 		speed_clock2 = 0;
 		status = ipq5018_s17c_Link_Update(priv);
 	}
+
+#ifdef CONFIG_YT9215_SWITCH
+	if (priv->yt9215_swt) {
+		ipq_yt9215_swt_cfg_t *scfg = priv->yt9215_cfg;
+
+		/*
+		 * The YT9215 sits between the SoC and the user ports; report the
+		 * switch's own port link state and force the UNIPHY to the SerDes
+		 * uplink speed so the CPU link matches.
+		 */
+		status = ipq_yt9215_link_update(scfg);
+		if (status == 0) {
+			speed = (scfg->serdes_speed == 1000) ?
+				FAL_SPEED_1000 : FAL_SPEED_2500;
+			duplex = FAL_FULL_DUPLEX;
+			mode = (scfg->serdes_speed == 1000) ?
+				PORT_WRAPPER_SGMII0_RGMII4 :
+				PORT_WRAPPER_SGMII_PLUS;
+			phy_mode = (scfg->serdes_speed == 1000) ? 0x30 : 0x50;
+			speed_clock1 = 1;
+			speed_clock2 = 0;
+		}
+	}
+#endif
 
 	if (priv->sfp_tx_gpio || phy_get_ops) {
 		if (phy_get_ops &&
@@ -817,6 +847,37 @@ int ipq_gmac_init(ipq_gmac_board_cfg_t *gmac_cfg)
 			phy_mode = 0x50;
 		else if (gmac_cfg->sfp_mode == PORT_WRAPPER_SGMII_FIBER)
 			phy_mode = 0x30;
+
+#ifdef CONFIG_YT9215_SWITCH
+		/*
+		 * Bring up the Motorcomm YT9215 switch that hangs off this
+		 * GMAC's MDIO bus.  The UNIPHY is first put into force mode at
+		 * the SerDes uplink speed, then the switch fabric is programmed.
+		 */
+		if (gmac_cfg->yt9215_switch_enable && gmac_cfg->unit) {
+			ipq_yt9215_swt_cfg_t *scfg = &yt9215_swt_cfg[i];
+
+			memset(scfg, 0, sizeof(*scfg));
+			scfg->mdio_addr = gmac_cfg->yt9215_mdio_addr;
+			scfg->cpu_port = gmac_cfg->yt9215_cpu_port;
+			scfg->serdes_port = gmac_cfg->yt9215_serdes_port;
+			scfg->serdes_speed = gmac_cfg->yt9215_serdes_speed;
+
+			ppe_uniphy_refclk_set();
+			ppe_uniphy_set_forceMode();
+			ipq_yt9215_switch_reset(gmac_cfg->yt9215_rst_gpio);
+			mdelay(100);
+
+			if (ipq_yt9215_switch_init(scfg) < 0) {
+				printf("GMAC%d: YT9215 switch init failed\n", i);
+				memset(scfg, 0, sizeof(*scfg));
+			} else {
+				ipq_gmac_macs[i]->yt9215_swt = 1;
+				ipq_gmac_macs[i]->yt9215_cfg = scfg;
+				ipq_gmac_macs[i]->phy_external_link = 1;
+			}
+		}
+#endif
 
 		snprintf((char *)ipq_gmac_macs[i]->phy_name,
 				sizeof(ipq_gmac_macs[i]->phy_name), "IPQ MDIO%d", i);

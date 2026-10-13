@@ -507,6 +507,12 @@ typedef struct {
 	int phy_external_link;
 	int switch_port_count;
 	int switch_port_phy_address[S17C_MAX_PORT];
+	int yt9215_switch_enable;
+	int yt9215_mdio_addr;
+	int yt9215_rst_gpio;
+	int yt9215_cpu_port;
+	int yt9215_serdes_port;
+	int yt9215_serdes_speed;
 	const char phy_name[MDIO_NAME_LEN];
 } ipq_gmac_board_cfg_t;
 

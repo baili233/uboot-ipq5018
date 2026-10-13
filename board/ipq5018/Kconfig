@@ -149,4 +149,17 @@ config IPQ5018_CR8818
 	default n
 	help
 		Enable support for ipq5018 xiaomi cr8818 support
+
+config YT9215_SWITCH
+	bool "Enable Motorcomm YT9215 switch support"
+	help
+	  Enable the Motorcomm YT9215 / YT9218 unmanaged Ethernet switch
+	  driver. The switch is reached over the SoC MDIO bus and is brought
+	  up as a plain untagged Layer-2 fabric with one or two CPU uplinks.
+
+config YT9215_DEBUG
+	bool "Enable YT9215 debug prints"
+	depends on YT9215_SWITCH
+	help
+	  Enable verbose YT9215 driver diagnostics.
 endif

@@ -264,6 +264,8 @@ struct ipq_eth_dev {
 	uint			phy_type;
 	uint			mac_ps;
 	uint			ipq_swith;
+	uint			yt9215_swt;
+	void			*yt9215_cfg;
 	uint			phy_external_link;
 	int			link_printed;
 	u32			sfp_mode;

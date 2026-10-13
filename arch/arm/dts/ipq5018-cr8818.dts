@@ -145,7 +145,19 @@
 			unit = <1>;
 			base = <0x39D00000>;
 			phy_address = <0x1c>;
-			napa_gpio = <39>;
+
+			/*
+			 * Motorcomm YT9215 switch on the GMAC1 MDIO bus.
+			 * MAC0-3 are the four user GE PHYs, MAC4 the RGMII CPU
+			 * uplink to the SoC's internal GE PHY and MAC8 the
+			 * 2500BASE-X SerDes uplink to UNIPHY0.
+			 */
+			yt9215_switch_enable = <1>;
+			yt9215_mdio_addr = <0x1d>;
+			yt9215_rst_gpio = <39>;
+			yt9215_cpu_port = <4>;
+			yt9215_serdes_port = <8>;
+			yt9215_serdes_speed = <2500>;
 		};
 
 	};

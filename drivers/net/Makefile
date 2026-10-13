@@ -114,6 +114,7 @@ obj-$(CONFIG_QCA8081_PHY) += ipq_common/ipq_qca8081.o
 obj-$(CONFIG_RTL8221_PHY) += ipq_common/ipq_rtl8221.o
 obj-$(CONFIG_YT8821_PHY) += ipq_common/ipq_yt8821.o
 obj-$(CONFIG_RTL8372N_SWITCH) += ipq_common/ipq_rtl8372n.o
+obj-$(CONFIG_YT9215_SWITCH) += ipq_common/ipq_yt9215.o
 obj-$(CONFIG_IPQ_QCA_AQUANTIA_PHY) += ipq_common/ipq_aquantia_phy.o
 obj-$(CONFIG_QCA_AQUANTIA_PHY) += ipq807x/ipq807x_aquantia_phy.o
 obj-$(CONFIG_IPQ6018_QCA_AQUANTIA_PHY) += ipq6018/ipq6018_aquantia_phy.o
